@@ -6,6 +6,10 @@ https://github.com/Zibri/cloudflare-cors-anywhere
 */
 
 /*
+Modified by ripka.ua@gmail.com to support passing of Cookie and Host
+*/
+
+/*
 whitelist = [ "^http.?://www.zibri.org$", "zibri.org$", "test\\..*" ];  // regexp for whitelisted urls
 */
 
@@ -30,8 +34,8 @@ addEventListener("fetch", async event=>{
         var origin_url = new URL(event.request.url);
 
         function fix(myHeaders) {
-            //            myHeaders.set("Access-Control-Allow-Origin", "*");
-            myHeaders.set("Access-Control-Allow-Origin", event.request.headers.get("Origin"));
+            myHeaders.set("Access-Control-Allow-Origin", "*");
+            //myHeaders.set("Access-Control-Allow-Origin", event.request.headers.get("Origin"));
             if (isOPTIONS) {
                 myHeaders.set("Access-Control-Allow-Methods", event.request.headers.get("access-control-request-method"));
                 acrh = event.request.headers.get("access-control-request-headers");
@@ -45,15 +49,16 @@ addEventListener("fetch", async event=>{
             }
             return myHeaders;
         }
-        var fetch_url = decodeURIComponent(decodeURIComponent(origin_url.search.substr(1)));
+        var fetch_url = unescape(unescape(origin_url.search.substr(1)));
 
         var orig = event.request.headers.get("Origin");
-        
         var remIp = event.request.headers.get("CF-Connecting-IP");
 
         if ((!isListed(fetch_url, blacklist)) && (isListed(orig, whitelist))) {
 
             xheaders = event.request.headers.get("x-cors-headers");
+            cookies = event.request.headers.get("x-cookies");
+            host = event.request.headers.get("x-host");
 
             if (xheaders != null) {
                 try {
@@ -75,9 +80,14 @@ addEventListener("fetch", async event=>{
                 if (xheaders != null) {
                     Object.entries(xheaders).forEach((c)=>recv_headers[c[0]] = c[1]);
                 }
+                if (cookies != null) {
+                    recv_headers["Cookie"] = cookies;
+                }
+                if (host != null) {
+                    recv_headers["Host"] = host;
+                }
 
                 newreq = new Request(event.request,{
-                    "redirect": "follow",
                     "headers": recv_headers
                 });
 
@@ -90,11 +100,15 @@ addEventListener("fetch", async event=>{
                     allh[pair[0]] = pair[1];
                 }
                 cors_headers.push("cors-received-headers");
+                cors_headers.push("x-cookies");
+                cors_headers.push("x-uuid");
                 myHeaders = fix(myHeaders);
 
                 myHeaders.set("Access-Control-Expose-Headers", cors_headers.join(","));
 
                 myHeaders.set("cors-received-headers", JSON.stringify(allh));
+                myHeaders.set("x-cookies", response.headers.get('set-cookie'));
+                myHeaders.set("x-uuid", Date.now() + (cookies != null ? "c" : "") + (host != null ? "h" : ""));
 
                 if (isOPTIONS) {
                     var body = null;
